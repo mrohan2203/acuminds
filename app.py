@@ -13,7 +13,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # ✅ Allow CORS from Vercel frontend
-CORS(app, resources={r"/*": {"origins": "*"}})  # or replace '*' with specific domain
+CORS(app, resources={r"/generate-response": {"origins": ["https://www.acuminds.com"]}})
 
 api_key = os.getenv("OPENAI_API_KEY")
 client = openai.OpenAI(api_key=api_key)
