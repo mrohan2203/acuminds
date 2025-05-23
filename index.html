@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AcuMinds - Chatbot</title>
+  <link rel="stylesheet" href="styles-index.css" />
+  <link rel="icon" href="acuminds-logo.svg" type="image/x-icon" />
+  <style>
+    .file-name-display {
+      background-color: #f0f0f0;
+      color: #333;
+      font-size: 14px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin-bottom: 5px;
+      max-width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .remove-file-btn {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 16px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+
+    .remove-file-btn:hover {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar" id="sidebar">
+    <div class="logo">
+      <img src="acuminds-logo.svg" alt="Acuminds logo" />
+      <img src="acuminds-text.svg" alt="Acuminds text" />
+      <img src="minimize.svg" alt="minimize" class="sidebar-toggle" id="sidebarToggle" />
+    </div>
+    <button class="new-thread" id="newThreadButton">
+      New Thread
+      <img src="thread.svg" alt="Thread" />
+    </button>
+    <div class="chat-log" id="chatLog"></div>
+  </div>
+
+  <div class="main-content">
+    <h1>Interactive Chatbot</h1>
+    <div class="chat-wrapper">
+      <div id="chatContainer" class="chat-container scrollable"></div>
+
+      <div class="chatbar-container">
+        <div class="search-bar">
+          <!-- File name and remove button -->
+          <div id="fileNameDisplay" class="file-name-display" style="display: none;">
+            <span id="fileLabelText"></span>
+            <button id="removeFileBtn" class="remove-file-btn" title="Remove file">&times;</button>
+          </div>
+
+          <input type="text" id="queryInput" placeholder="Ask anything..." />
+          <div class="additional-buttons">
+            <div class="action-buttons">
+              <button class="attach-btn" id="attachBtn">
+                <img src="attach.svg" alt="Attach icon" />Attach
+              </button>
+              <input type="file" id="fileInput" accept=".xlsx, .xls" style="display: none" />
+            </div>
+            <button class="search-btn" id="searchBtn">Search</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const chatContainer = document.getElementById("chatContainer");
+      const queryInput = document.getElementById("queryInput");
+      const searchBtn = document.getElementById("searchBtn");
+      const attachBtn = document.getElementById("attachBtn");
+      const fileInput = document.getElementById("fileInput");
+      const fileNameDisplay = document.getElementById("fileNameDisplay");
+      const fileLabelText = document.getElementById("fileLabelText");
+      const removeFileBtn = document.getElementById("removeFileBtn");
+
+      const chatLog = document.getElementById("chatLog");
+      const newThreadButton = document.getElementById("newThreadButton");
+
+      let uploadedFile = null;
+      let chatCounter = 1;
+      let chatThreads = {};
+      let activeThreadId = null;
+      let chatTitles = {};
+
+      function renderMessages() {
+        chatContainer.innerHTML = "";
+        if (!activeThreadId || !chatThreads[activeThreadId]) return;
+        chatThreads[activeThreadId].forEach(msg => {
+          const wrapper = document.createElement("div");
+          wrapper.className = `message-wrapper ${msg.sender}-message`;
+          const bubble = document.createElement("div");
+          bubble.className = `chat-bubble ${msg.sender}`;
+          bubble.textContent = msg.text;
+          wrapper.appendChild(bubble);
+          chatContainer.appendChild(wrapper);
+        });
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+
+      function createChatLogEntry(threadId, title) {
+        const entry = document.createElement("div");
+        entry.className = "chat-log-entry";
+        entry.dataset.threadId = threadId;
+
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "chat-title";
+        titleSpan.textContent = title;
+
+        const deleteBtn = document.createElement("img");
+        deleteBtn.src = "dustbin-icon.svg";
+        deleteBtn.alt = "Delete";
+        deleteBtn.className = "delete-icon";
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          delete chatThreads[threadId];
+          delete chatTitles[threadId];
+          if (activeThreadId === threadId) {
+            chatContainer.innerHTML = '';
+            activeThreadId = null;
+          }
+          entry.remove();
+        });
+
+        entry.appendChild(titleSpan);
+        entry.appendChild(deleteBtn);
+        entry.addEventListener("click", () => {
+          activeThreadId = threadId;
+          renderMessages();
+        });
+
+        chatLog.appendChild(entry);
+      }
+
+      function createDefaultThread() {
+        const threadId = `chat-${Date.now()}`;
+        chatThreads[threadId] = [];
+        chatTitles[threadId] = null;
+        activeThreadId = threadId;
+        renderMessages();
+        createChatLogEntry(threadId, `Chat ${chatCounter++}...`);
+      }
+
+      newThreadButton.addEventListener("click", () => {
+        createDefaultThread();
+
+        // ✅ Clear uploaded file and UI
+        uploadedFile = null;
+        fileInput.value = null;
+        fileNameDisplay.style.display = "none";
+
+        // ✅ Optional: reset context from backend too
+        fetch("/api/generate-response", { method: "POST" })
+            .then(() => console.log("🔄 Backend context reset."))
+            .catch(() => console.warn("⚠️ Could not reset backend context."));
+        });
+
+      searchBtn.addEventListener("click", async function () {
+        const query = queryInput.value.trim();
+        if (!query) {
+          alert("Please enter a message.");
+          return;
+        }
+
+        if (!activeThreadId) {
+          createDefaultThread();
+        }
+
+        const threadMessages = chatThreads[activeThreadId];
+        const chatEntry = [...chatLog.children].find(e => e.dataset.threadId === activeThreadId);
+
+        if (!chatTitles[activeThreadId]) {
+          const titleText = query.length > 30 ? query.slice(0, 27) + "..." : query;
+          chatTitles[activeThreadId] = titleText;
+          if (chatEntry) {
+            chatEntry.querySelector(".chat-title").textContent = titleText;
+          }
+        }
+
+        threadMessages.push({ sender: "user", text: query });
+
+        const userWrapper = document.createElement("div");
+        userWrapper.className = "message-wrapper user-message";
+        const userBubble = document.createElement("div");
+        userBubble.className = "chat-bubble user";
+        userBubble.textContent = query;
+        userWrapper.appendChild(userBubble);
+        chatContainer.appendChild(userWrapper);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        const formData = new FormData();
+        formData.append("query", query);
+        if (uploadedFile) {
+          formData.append("file", uploadedFile);
+        }
+
+        try {
+          const response = await fetch("http://127.0.0.1:5000/generate-response", {
+            method: "POST",
+            body: formData
+          });
+
+          const result = await response.json();
+          if (!response.ok || result.error) throw new Error(result.error || response.statusText);
+
+          const reply = result.response;
+          threadMessages.push({ sender: "bot", text: reply });
+
+          const botWrapper = document.createElement("div");
+          botWrapper.className = "message-wrapper bot-message";
+          const botBubble = document.createElement("div");
+          botBubble.className = "chat-bubble bot";
+          botBubble.textContent = reply;
+          botWrapper.appendChild(botBubble);
+          chatContainer.appendChild(botWrapper);
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+        } catch (err) {
+          console.error("Error:", err);
+          alert("Failed to fetch response.");
+        }
+
+        queryInput.value = "";
+      });
+
+      document.getElementById("sidebarToggle").addEventListener("click", function () {
+        document.getElementById("sidebar").classList.toggle("collapsed");
+      });
+
+      attachBtn.addEventListener("click", () => fileInput.click());
+
+      fileInput.addEventListener("change", function (e) {
+        const file = e.target.files[0];
+        if (file) {
+          uploadedFile = file;
+          fileLabelText.textContent = `Attached: ${file.name}`;
+          fileNameDisplay.style.display = "flex";
+        }
+      });
+
+      removeFileBtn.addEventListener("click", function () {
+        uploadedFile = null;
+        fileInput.value = null;
+        fileNameDisplay.style.display = "none";
+      });
+
+      createDefaultThread();
+    });
+  </script>
+</body>
+</html>
