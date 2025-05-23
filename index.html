@@ -164,7 +164,7 @@
         fileNameDisplay.style.display = "none";
 
         // ✅ Optional: reset context from backend too
-        fetch("/api/generate-response", { method: "POST" })
+        fetch("https://acuminds-api.onrender.com/generate-response", { method: "POST" })
             .then(() => console.log("🔄 Backend context reset."))
             .catch(() => console.warn("⚠️ Could not reset backend context."));
         });
